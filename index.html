@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nuage de Points avec Séparateur de Colonnes</title>
+    <script src="https://cdn.plot.ly/plotly-2.20.0.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #graph {
+            width: 100%;
+            max-width: 800px;
+            margin: 20px auto;
+        }
+        textarea {
+            width: 100%;
+            max-width: 800px;
+            height: 150px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Nuage de Points</h1>
+    <p>Copiez-collez vos données tabulées (format TSV ou CSV).</p>
+    <textarea id="dataInput" placeholder="Age\tTime\n22,5\t823\n22,5\t610\n..."></textarea>
+    <br><br>
+    <label for="separator">Séparateur de colonnes :</label>
+    <select id="separator">
+        <option value="\t">Tabulation (par défaut pour copier-coller depuis un tableur)</option>
+        <option value=",">Virgule (CSV anglo-saxon)</option>
+        <option value=";">Point-virgule (CSV français)</option>
+    </select>
+    <br><br>
+    <label for="notation">Notation des nombres :</label>
+    <select id="notation">
+        <option value="fr">Française (virgule comme séparateur de décimales)</option>
+        <option value="us">Anglo-saxonne (point comme séparateur de décimales)</option>
+    </select>
+    <br><br>
+    <button id="analyze">Analyser les données</button>
+    <br><br>
+    <label for="xAxis">Colonne X :</label>
+    <select id="xAxis"></select>
+    <label for="yAxis">Colonne Y :</label>
+    <select id="yAxis"></select>
+    <button id="generate" disabled>Générer le graphique</button>
+    <div id="graph"></div>
+    <script>
+        let headers = [];
+        let data = [];
+
+        // Analyser les données
+        document.getElementById('analyze').addEventListener('click', () => {
+            const input = document.getElementById('dataInput').value.trim();
+            const separator = document.getElementById('separator').value; // Récupère le séparateur
+            const notation = document.getElementById('notation').value;  // Récupère la notation des nombres
+
+            if (!input) {
+                alert("Veuillez entrer des données avant de continuer.");
+                return;
+            }
+
+            // Split rows and detect header
+            const rows = input.split('\n');
+            headers = rows[0].split(new RegExp(separator)); // Utilise le séparateur sélectionné
+
+            // Convertir les données en fonction du séparateur et de la notation
+            data = rows.slice(1).map(row => {
+                return row.split(new RegExp(separator)).map(value => {
+                    if (notation === 'fr') {
+                        // Convertir les virgules en points pour les nombres français
+                        return parseFloat(value.replace(',', '.').trim());
+                    } else {
+                        // Pas de conversion nécessaire pour les nombres anglo-saxons
+                        return parseFloat(value.trim());
+                    }
+                });
+            });
+
+            // Validate data
+            if (data.some(row => row.length !== headers.length)) {
+                alert("Les données ne sont pas uniformes : toutes les lignes doivent contenir le même nombre de colonnes.");
+                return;
+            }
+
+            // Populate dropdown menus
+            const xAxisSelect = document.getElementById('xAxis');
+            const yAxisSelect = document.getElementById('yAxis');
+            xAxisSelect.innerHTML = yAxisSelect.innerHTML = headers.map((header, index) =>
+                `<option value="${index}">${header}</option>`
+            ).join('');
+
+            // Enable the "Generate" button
+            document.getElementById('generate').disabled = false;
+        });
+
+        // Générer le graphique
+        document.getElementById('generate').addEventListener('click', () => {
+            const xIndex = parseInt(document.getElementById('xAxis').value);
+            const yIndex = parseInt(document.getElementById('yAxis').value);
+
+            const xData = data.map(row => row[xIndex]);
+            const yData = data.map(row => row[yIndex]);
+
+            // Vérification des données
+            if (xData.some(isNaN) || yData.some(isNaN)) {
+                alert("Les colonnes sélectionnées contiennent des données non numériques.");
+                return;
+            }
+
+            // Créer le graphique
+            const trace = {
+                x: xData,
+                y: yData,
+                mode: 'markers',
+                marker: { size: 10, color: 'blue' },
+                type: 'scatter',
+                name: 'Données'
+            };
+
+            // Calculer et ajouter une droite de tendance
+            const xMean = xData.reduce((sum, xi) => sum + xi, 0) / xData.length;
+            const yMean = yData.reduce((sum, yi) => sum + yi, 0) / yData.length;
+            const slope = xData.reduce((sum, xi, i) => sum + (xi - xMean) * (yData[i] - yMean), 0) /
+                          xData.reduce((sum, xi) => sum + Math.pow(xi - xMean, 2), 0);
+            const intercept = yMean - slope * xMean;
+
+            const trendline = {
+                x: [Math.min(...xData), Math.max(...xData)],
+                y: [Math.min(...xData) * slope + intercept, Math.max(...xData) * slope + intercept],
+                mode: 'lines',
+                line: { color: 'red', dash: 'dash' },
+                name: 'Droite de tendance'
+            };
+
+            // Configuration du graphique
+            const layout = {
+                title: 'Nuage de Points',
+                xaxis: { title: headers[xIndex] },
+                yaxis: { title: headers[yIndex] },
+                showlegend: true
+            };
+
+            Plotly.newPlot('graph', [trace, trendline], layout);
+        });
+    </script>
+</body>
+</html>
+
